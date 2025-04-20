@@ -1,0 +1,319 @@
+# Стан Илья 520, вариант 2
+
+library(Information)
+library(Metrics)
+library(vcdExtra)
+library(mice)
+library(caret)
+library(tidyverse)
+library(adjROC)
+library(questionr)
+
+setwd("/Users/ilia.stan/Programming/R/task5")
+getwd()
+
+df <- new("data.frame", read.csv("CARS.csv", header=TRUE, sep=","))
+df <- df[c("Type", "Origin", "DriveTrain", "MSRP", "Invoice",
+           "EngineSize", "Cylinders", "Horsepower", "Weight", "Wheelbase", "Length")]
+# категориальные - Type, Origin, DriveTrain
+
+# Заполнение пропусков через mice
+tmp <- mice(df)
+df <- complete(tmp, 1)
+sum(is.na(df)) # 0, число строк не поменялось
+
+df["MSRP"] <- lapply(df["MSRP"], function(x) strtoi(substr(sub(",", "", x), 2, 10), 10))
+df["Invoice"] <- lapply(df["Invoice"], function(x) strtoi(substr(sub(",", "", x), 2, 10), 10))
+Cheap <- as.data.frame(as.numeric(df["Invoice"] < 20000))
+names(Cheap) <- c("Cheap")
+
+
+# убираем цены, так как на их основе построен отклик.
+# Также нормируем для лучшей сходимости регрессий.
+X <- as.data.frame(scale(df[c(
+           "EngineSize", "Cylinders", "Horsepower", "Weight", "Wheelbase", "Length")]))
+X[c("Type", "Origin", "DriveTrain")] <- df[c("Type", "Origin", "DriveTrain")]
+# Насколько я понял, отклик в этой задаче - Cheap.
+
+# _________________________________
+# Номер 1
+
+test1df <- Cheap
+
+test1df$Weight <- df$Weight < mean(df$Weight)
+chisq.test(test1df$Weight, test1df$Cheap)
+
+test1df["StratHP"] <- df$Horsepower < mean(df$Horsepower) - 50
+CMHtest(~., data=test1df)
+
+# Итого: показываем, что зависимость
+# от Weight < mean(Weight) есть, если нет других предикторов, и нет,
+# если добавить стратификацию по StratHP. Вычитание 50 - подгонка, но, как я понял,
+# данное задание допускает "тупую" подгонку.
+
+# _______________________________________
+# Номер 2
+
+# effect encoding
+X$Type <- as.factor(X$Type)
+X$Origin <- as.factor(X$Origin)
+X$DriveTrain <- as.factor(X$DriveTrain)
+contrasts(X$Type) <- contr.sum(length(unique(X$Type)))
+contrasts(X$DriveTrain) <- contr.sum(length(unique(X$DriveTrain)))
+contrasts(X$Origin) <- contr.sum(length(unique(X$Origin)))
+
+model <- glm(Cheap$Cheap~., data=X, family=binomial())
+summary(model) # видно, что кодирование сработало
+
+res <- step(model, direction = "backward", k = log(428)) # SBC
+# Над <none> нет предикторов => остановились
+# отмечу, что если не убрать цены из предикторов, то алгоритм не сойдётся.
+
+
+
+measureAUC5Folds <- function(data) {
+  ln = dim(data)[1]
+  st <- round(ln/5)
+  meanAUC <- 0
+  # По хорошему надо доставать фолды рандомно, но здесь берём из 1,2,3,4...
+  
+  for (i in 0:4) {
+    i.start <- 1 + i*st
+    i.end <- 1 + (i+1)*st-1
+    if (i.start == 1) {
+      idxs <- i.end : ln
+    }
+    else if (i.end >= ln) {
+      idxs <- 1:i.start
+    }
+    else {
+      idxs <- append(1:i.start, i.end:ln)
+    }
+    train <- data[idxs,]
+    test <- data[i.start:min(i.end, ln),]
+    model <- glm(Cheap$Cheap[idxs]~., data=train, family=binomial())
+    pr <- predict(model, newdata = test, type = "response")
+    # print(pr)
+    meanAUC <- meanAUC + auc(Cheap$Cheap[i.start:min(i.end, ln)], pr)
+  }
+  return(meanAUC/5)
+}
+
+# В выводе step выводит формулы для обучения на каждом шаге.
+# Напрашивается "тупой" подход построения графиков:
+
+# Алгоритм :
+# 1 На 4 из 5 фолдов учимся, на 5 ROC. Так 5 раз, для каждого фолда
+# ROC усреднять и запоминать.
+AUCs <- c()
+
+X_ <- X[c("Type", "Origin", "DriveTrain", "EngineSize", "Cylinders", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+X_$Type <- as.factor(X_$Type)
+X_$Origin <- as.factor(X_$Origin)
+X_$DriveTrain <- as.factor(X_$DriveTrain)
+contrasts(X_$Type) <- contr.sum(length(unique(X_$Type)))
+contrasts(X_$DriveTrain) <- contr.sum(length(unique(X_$DriveTrain)))
+contrasts(X_$Origin) <- contr.sum(length(unique(X_$Origin)))
+AUCs[1] <- measureAUC5Folds(X_)
+
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", "EngineSize", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+AUCs[2] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+AUCs[3] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Wheelbase", "Length")]
+AUCs[4] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Wheelbase")]
+AUCs[5] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", 
+          "Horsepower", "Wheelbase")]
+AUCs[6] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", 
+          "Horsepower")]
+AUCs[7] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Origin", 
+          "Horsepower")]
+AUCs[8] <- measureAUC5Folds(X_)
+
+AUCs
+plot(9:2, AUCs)
+
+# Лучшее значение - для предикторов Type, Origin, Horsepower: 0.9603235
+
+#___________________________
+# Номер 3
+
+# Найдём WOE (и IV)
+X__ <- X[c("Type", "Origin", "DriveTrain")]
+X__["Cheap"] <- Cheap$Cheap
+IV <- create_infotables(data = X__, y = "Cheap")
+
+AUCs <- c()
+
+X_ <- X[c("Type", "Origin", "DriveTrain", "EngineSize", "Cylinders", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+
+j <- 1
+new_col <- as.numeric(Cheap$Cheap == 2)
+for (i in IV$Tables$Type$Type) {
+  new_col <-  new_col + (X_$Type == i)*IV$Tables$Type$WOE[j]
+  j <- j + 1
+}
+X_$Type <- new_col
+unique(X_$Type)
+
+j <- 1
+new_col <- as.numeric(Cheap$Cheap == 2)
+for (i in IV$Tables$Origin$Origin) {
+  new_col <-  new_col + (X_$Origin == i)*IV$Tables$Origin$WOE[j]
+  j <- j + 1
+}
+X_$Origin <- new_col
+unique(X_$Origin)
+
+j <- 1
+new_col <- as.numeric(Cheap$Cheap == 2)
+for (i in IV$Tables$DriveTrain$DriveTrain) {
+  new_col <-  new_col + (X_$DriveTrain == i)*IV$Tables$DriveTrain$WOE[j]
+  j <- j + 1
+}
+X_$DriveTrain <- new_col
+unique(X_$DriveTrain)
+
+
+AUCs[1] <- measureAUC5Folds(X_)
+
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", "EngineSize", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+
+AUCs[2] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Weight", "Wheelbase", "Length")]
+
+AUCs[3] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Wheelbase", "Length")]
+
+AUCs[4] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", "DriveTrain", 
+          "Horsepower", "Wheelbase")]
+
+AUCs[5] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", 
+          "Horsepower", "Wheelbase")]
+
+AUCs[6] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Type", "Origin", 
+          "Horsepower")]
+
+AUCs[7] <- measureAUC5Folds(X_)
+
+X_ <- X_[c("Origin", 
+          "Horsepower")]
+
+AUCs[8] <- measureAUC5Folds(X_)
+
+AUCs
+plot(9:2, AUCs)
+
+# Лучший набор предикторов: ("Type", "Origin", "Horsepower", "Wheelbase"), 0.9611443
+# Это лучший результат из двух пунктов.
+
+X_ <- X[c("Type", "Origin", "Horsepower", "Wheelbase")]
+j <- 1
+new_col <- as.numeric(Cheap$Cheap == 2)
+for (i in IV$Tables$Type$Type) {
+  new_col <-  new_col + (X_$Type == i)*IV$Tables$Type$WOE[j]
+  j <- j + 1
+}
+X_$Type <- new_col
+
+j <- 1
+new_col <- as.numeric(Cheap$Cheap == 2)
+for (i in IV$Tables$Origin$Origin) {
+  new_col <-  new_col + (X_$Origin == i)*IV$Tables$Origin$WOE[j]
+  j <- j + 1
+}
+X_$Origin <- new_col
+
+res_model <- glm(Cheap$Cheap~., data=X_, family=binomial())
+
+
+# 4. Использовать boot.roc
+res_model_under <- glm(Cheap$Cheap[1:214]~., data=X_[1:214,], family=binomial())
+full.res <- boot.roc(predict(res_model, type = "response"), Cheap$Cheap, n = 100)
+under.res <- boot.roc(predict(res_model_under, newdata = X_, type = "response"), Cheap$Cheap,
+                      n = 100)
+
+# Получилось, что модели различаются не сильно (на 1/100).
+# Возможно, половина выборки содержала достаточно информации для описания генеральной
+# совокупности. Также отметим, что предварительно была проведена работа с
+# датасетом (выбраны значимые признаки, категориальные переведены в непрерывные 
+# наиболее подходящим методом). Поэтому модель изменилась несильно.
+
+# Можно использовать алгоритмы для undersampling (уравнивание пропорций вхождения классов).
+# Но раз выбранный подход не испортил результат, то останемся при нём.
+
+sum(abs(round(predict(res_model, type = "response")) - Cheap$Cheap))
+# Число промахов - 33/428 всего
+hist(predict(res_model, type = "response") - Cheap$Cheap)
+# Вроде адекватное значение числа промахов, ошибка с центром примерно в 0.
+# Можно сказать, что модель хорошо обучилась.
+# Комментарий пишу, так как почему-то довольно часто выходит, что логистическая ошибка
+# выдаёт кучу предупреждений разного рода и не сходится. Здесь вроде всё хорошо.
+
+# _____________________
+# Номер 5
+# Здесь возникает куча предупреждений, о которых в интернете пишут много умного.
+# Но я так и не понял, что не так.
+
+data_odds <- odds.ratio(res_model, level = 0.95)
+# Эта функция выводит тот же результат, что и команды с лекций, но в алгоритме с лекций
+# Intercept почему-то огромный, а здесь в нуле.
+names(data_odds) <- c("OR", "Lower", "Upper", "p")
+data_odds
+
+ggplot2::ggplot(data_odds, aes(y = row.names(data_odds), x = OR)) +
+  geom_point() +
+  geom_errorbar(aes(xmin = Lower, xmax = Upper)) + 
+  geom_vline(xintercept = 1.0, colour = "red")
+
+X_$Cheap <- Cheap$Cheap
+IV_res <- create_infotables(data = X_, valid = X_, y = "Cheap", bins = 10, parallel = FALSE)
+# Эта функция дискретизует по квантилям, а не равномерно.
+# Отмечу, что если брать меньше bins, то IV Horsepower растёт, а у других падает.
+# Возможно, имеет смысл дискретизовать Horsepower на небольшое число интервалов
+# для повышения качества итоговой модели.
+IV_res$Summary
+
+# Как пишут в интернетах, на малых датасетах IV может быть большим, что значит, что
+# данный предиктор впринципе может неплохо описать отклик и в одиночку.
+# На огромных данных большой IV означает возможную утечку данных (Между таргетом
+# и предиктором большая логичная связь, как и здесь: число лошадиных сил почти напрямую
+# влияет на цену).
+
+ggplot(data = IV_res$Summary, mapping = aes(x=Variable, y = IV)) +
+  geom_col() + geom_hline(yintercept = 0.5)
+
+# Итого, IV говорит, что, в целом, все переменные полезны для предсказания.
+# OR говорит, что Wheelbase переменная не очень важна.
+# Возможно, имеет смысл попробовать нелинейное преобразование к Wheelbase.
+# Различия показателей обосновываются различием в алгоритмах получения значений.
+

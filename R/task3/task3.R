@@ -1,0 +1,371 @@
+# Стан Илья 520, 2 вариант
+library(nortest)
+library(emmeans)
+library(multcomp)
+library(pls)
+library(olsrr)
+library(ggplot2)
+
+
+setwd("/Users/ilia.stan/Programming/R/task3")
+getwd()
+
+
+bic.from.resids <- function(resids, n, k) {
+  s = var(resids)
+  return(n*log(2*pi) + n * log(s) +
+           (1/s)*sum(resids*resids) +
+           (k + 1) * log(n))
+}
+
+
+# Столько полей для графиков
+setClass("lm_choise", slots=c("model", "step", "MPG_City", "prev_model", "prev_dffits",
+                              "origins_model", "types_model", "drs_model",
+                              "origin", "type",
+                              "drs", "dffits", "ols", "coeffs.df",
+                              "bics"))
+setGeneric("get_data", function(object, train_data, step) {
+  standardGeneric("get_data")
+})
+setGeneric("fit", function(object, train_data, step) {
+  standardGeneric("fit")
+})
+getGeneric("summary")
+setGeneric("plot", function(object) {
+  standardGeneric("plot")
+})
+
+setMethod("get_data",
+          "lm_choise",
+          
+          function(object, train_data, step) {
+            
+            X <- train_data[c("Type", "Origin", "DriveTrain", "MSRP", "Invoice",
+                              "EngineSize", "Cylinders", "Horsepower", "Weight", "Wheelbase", "Length")]
+
+            if (step >= 2) {
+              object@prev_model <- lm(train_data$MPG_City~., X)
+              object@prev_dffits <- dffits(object@prev_model)
+              train_data <- subset(train_data, abs(object@prev_dffits) < 1.26)
+              X <- train_data[c("Type", "Origin", "DriveTrain", "MSRP", "Invoice",
+                                "EngineSize", "Cylinders", "Horsepower", "Weight", "Wheelbase", "Length")]
+            }
+            if (step >= 3) {
+              
+              # Origin
+              origins <- as.factor(train_data$Origin)
+              object@origins_model <- lm(train_data$MPG_City~(origins))
+
+              NotAsia <- subset(train_data, train_data$Origin != "Asia")
+              object@origin <- wilcox.test(NotAsia$MPG_City~NotAsia$Origin, data=NotAsia, correct=TRUE)
+              
+              train_data$Origin[train_data$Origin != "Asia"] = "NotAsia"
+              
+              # Type
+              object@type <- list()
+              types <- as.factor(train_data$Type)
+              object@types_model <- lm(train_data$MPG_City~(types))
+
+              Sedan.Wagon <- subset(train_data, (train_data$Type=="Wagon") | (train_data$Type=="Sedan"))
+              object@type[[1]] <- wilcox.test(Sedan.Wagon$MPG_City~Sedan.Wagon$Type, data=Sedan.Wagon, correct=TRUE)
+              SUV.Truck <- subset(train_data, (train_data$Type=="SUV") | (train_data$Type=="Truck"))
+              object@type[[2]] <- wilcox.test(SUV.Truck$MPG_City~SUV.Truck$Type, data=SUV.Truck, correct=TRUE)
+              
+              train_data$Type[(train_data$Type == "Sedan")] = "SW"
+              train_data$Type[(train_data$Type == "Wagon")] = "SW"
+              train_data$Type[(train_data$Type == "Truck")] = "TS"
+              train_data$Type[(train_data$Type == "SUV")] = "TS"
+              
+              # DriveTrain
+              drs <- as.factor(train_data$DriveTrain)
+              object@drs_model <- lm(train_data$MPG_City~(drs))
+
+              All.Rear <- subset(train_data, (train_data$DriveTrain != "Front"))
+              object@drs <- wilcox.test(All.Rear$MPG_City~All.Rear$DriveTrain, data=All.Rear, correct=TRUE)
+              train_data$DriveTrain[(train_data$DriveTrain != "Front")] = "RA"
+              
+
+              X <- train_data[c("Type", "Origin", "DriveTrain", "MSRP", "Invoice",
+                                "EngineSize", "Cylinders", "Horsepower", "Weight", "Wheelbase", "Length")]
+            }
+            return(list("model" = object, "X" = X,
+                        "y" = train_data$MPG_City))
+          }
+)
+
+setMethod("fit",
+          "lm_choise",
+          
+          function(object, train_data, step = 1) {
+            object@step <- step
+            if (step == 1) {
+              dt <- get_data(object, train_data, step)
+              object <- dt[["model"]]
+              X <- dt[["X"]]
+              object@MPG_City <- dt[["y"]]
+              object@model <- lm(object@MPG_City~., X)
+              
+            } else if (step == 2) {
+              dt <- get_data(object, train_data, step)
+              object <- dt[["model"]]
+              X <- dt[["X"]]
+              object@MPG_City <- dt[["y"]]
+              object@model <- lm(object@MPG_City~., X)
+              object@dffits <- dffits(object@model)
+              
+            } else if (step == 3) {
+              dt <- get_data(object, train_data, step)
+              object <- dt[["model"]]
+              X <- dt[["X"]]
+              object@MPG_City <- dt[["y"]]
+              object@model <- lm(object@MPG_City~., X)
+              
+            } else if (step == 4) {
+              dt <- get_data(object, train_data, step)
+              object <- dt[["model"]]
+              X <- dt[["X"]]
+              object@MPG_City <- dt[["y"]]
+              
+              # Получим оптимальный порядок добавления предикторов
+              object@ols <- ols_step_forward_sbc(lm(object@MPG_City~., X))
+              
+              # Построим трассы
+              predictors <- c("Weight", "Type", "Horsepower", "DriveTrain", "EngineSize")
+              cols <- c(
+                "Weight", "TypeSports", "TypeSW", "TypeTS",
+                "Horsepower", "DriveTrainRA",
+                "EngineSize"
+              )
+              coeffs <- list("Step"=c(0, 0, 0, 0, 0, 0, 0),
+                             "Coeff"=c(0, 0, 0, 0, 0, 0, 0),
+                             "Group"=c("Weight", "TypeSports", "TypeSW", "TypeTS",
+                                       "Horsepower", "DriveTrainRA",
+                                       "EngineSize"))
+              for (i in 1:length(predictors)) {
+                X_ <- X[predictors[1:i]]
+                m_ <- lm(object@MPG_City~., X_)
+                for (name in cols) {
+                  length(coeffs[["Step"]])+1 -> tmp.len
+                  if (is.na(m_$coefficients[name])) {
+                    coeffs[["Step"]][tmp.len] = i
+                    coeffs[["Coeff"]][tmp.len] = 0
+                    coeffs[["Group"]][tmp.len] = name
+                    
+                  }
+                  else{
+                    coeffs[["Step"]][tmp.len] = i
+                    coeffs[["Coeff"]][tmp.len] = m_$coefficients[name]
+                    coeffs[["Group"]][tmp.len] = name
+                  }
+                }
+              }
+              object@coeffs.df <- data.frame(coeffs)
+              object@model <- object@ols$model
+              
+            } else if (step == 5) {
+              dt <- get_data(object, train_data, step)
+              object <- dt[["model"]]
+              X <- dt[["X"]]
+              object@MPG_City <- dt[["y"]]
+              object@bics <- c()
+              object@model <- plsr(object@MPG_City~., data = X)
+              for (i in 1:13) {
+                object@bics[i] <- (bic.from.resids(object@model$residuals[,,paste(as.character(i), "comps")], length(X[["Weight"]]), i))
+              }
+            }
+            return(object)
+          }
+)
+
+setMethod("summary",
+          "lm_choise",
+          
+          function(object, ...) {
+            r <- object@model$residuals
+            n <- length(object@MPG_City)
+            k <- length(object@model$coefficients)
+            if (object@step == 2) {
+              sort(object@prev_dffits)
+            } else if (object@step == 3) {
+              show(object@origin)
+              show(object@type[[1]])
+              show(object@type[[2]])
+              show(object@drs)
+            } else if (object@step == 5) {
+              r <- r[,,"13 comps"]
+              k <- 13
+            }
+            
+            base::summary(object@model)
+            print(object@model)
+            print(ad.test(r))
+            print("BIC:")
+            print(bic.from.resids(r, n, k))
+          }
+)
+
+setMethod("plot",
+          "lm_choise",
+          
+          function(object) {
+            r <- object@model$residuals
+            if (object@step == 2) {
+              base::plot(predict(object@prev_model), object@prev_dffits, main = "Dffits before removal")
+              base::plot(predict(object@model), object@dffits, main = "Dffits after removal")
+            } else if (object@step == 3) {
+              par(mar = c(6, 7, 6, 6))
+              base::plot(glht(object@origins_model), main = "glht Origin")
+              base::plot(glht(object@types_model), main = "glht Type")
+              base::plot(glht(object@drs_model, ), main = "glht DriveTrain")
+            } else if (object@step == 4) {
+              base::plot(object@ols, main = "ols")
+              show(ggplot(object@coeffs.df, mapping = aes(x = Step, y = Coeff, group = Group, color=Group)) +
+                geom_line(aes(group=Group), show.legend = TRUE) +
+                ylab("weights of predictors") +
+                xlab("number of predictors"))
+            } else if (object@step == 5) {
+              r <- object@model$residuals[,,"13 comps"]
+              base::plot(1:13, object@bics, xlab = "n comps", type = "l", main = "BICs for components")
+            }
+            hist(r, main = "hist of residuals")
+            qqnorm(r, frame=FALSE, main = "QQ graph")
+            qqline(r, col = "red", lwd = 2)
+            base::plot(object@MPG_City, r, main = "resids of y (MPG_City)")
+          }
+)
+
+
+
+
+df <- new("data.frame", read.csv("CARS.csv", header=TRUE, sep=","))
+df <- na.omit(df) # всего 2 строки с пустыми значениями
+
+# из строк-цен в числа.
+df["MSRP"] <- lapply(df["MSRP"], function(x) strtoi(substr(sub(",", "", x), 2, 10), 10))
+df["Invoice"] <- lapply(df["Invoice"], function(x) strtoi(substr(sub(",", "", x), 2, 10), 10))
+
+object <- new("lm_choise")
+
+# 1 номер
+# __________________________________________________________
+# Не вводим категориальные предикторы Make и Model, так как там слишком много
+# уникальных значений.
+
+object <- fit(object, df, 1)
+summary(object)
+plot(object)
+
+# R2: 0.8511, R2 скорректированный: 0.8449
+# Наиболее значим вклад от типа авто (TypeSedan, ...)
+# Наименее - DriveTrainRear (возможно, этот предиктор сильно скореллирован с каким-то типом авто)
+
+# распределение остатков приблизительно нормальное с нулевым средним (но вершина слишком высокая).
+
+# Из графиков остатков видно, что некоторые модель не полностью охватила зависимости в данных,
+# на большом значении расхода остатки плохие.
+
+# BIC: 1924.334
+# проверка формулы (пригодится)
+# bic.from.resids(full_model$residuals, length(X[["Weight"]]), length(full_model$coefficients))
+# Думаю, что погрешность в 0.001 не критична. Скорее всего она из-за другого вычисления s в BIC().
+
+# Вердикт: Как мне кажется, условия применимости в целом с натяжкой выполняются.
+
+
+# 2 номер
+# _____________________________________________________________
+
+object <- fit(object, df, 2)
+summary(object)
+plot(object)
+# Как мне кажется из графика dffits, здесь на удаление просятся либо два крайних, либо 5 наблюдений
+# (если брать, чтобы было меньше 1 по модулю влияние)
+
+# При вывод упорядоченных dffits видно, что 3 кандидата на удаление с влияниями : -3.54, 1.26, 2.37
+# В env видно, что удалены ровно три наблюдения.
+
+# Отметим, что этим действием мы убрали по сути единственных представителей "высокого" MPG.
+# Это делает модель "менее информированной".
+# Как мне кажется, в данной постановке выбросов нет, каждая машина даёт полезную информацию.
+
+# Качество стало чуть хуже.
+
+# хвосты в гистограмме стали короче.
+# BIC стал меньше (т.е. по данному критерию модель стала чуть лучше).
+
+# 3 номер
+#___________________________________________
+# Категориальные переменные: Type, Origin, DriveTrain.
+# Выборка из пункта 2
+
+object <- fit(object, df, 3)
+summary(object)
+plot(object)
+
+# По glht можно понять, кого в принципе нужно сравнивать.
+
+# Origin
+# Можно объединить USA и Europe
+
+# Type
+# Можно объединить Wagon-Sedan и Truck-SUV
+
+# DriveTrain
+# Пускай можно объединить Rear-All (при пороге 0.01)
+
+# Качество стало чуть-чуть хуже.
+
+# BIC стал Ещё меньше, по этому критерию модель становится ещё лучше.
+# Объединив категории мы уменьшили число предикторов, тем самым уменьшив BIC.
+
+# Комментарий к изменениям t-test для категориальных переменных:
+# Type остался самым важным, t-test(OriginNotAsia) - между 
+# t-test(OriginEurope) и t-test(OriginUSA)
+# DriveTrainRear был самым незначимым, а когда мы объединили его с DriveTrainAll - 
+# вместе они уже значимы.
+
+# 4 номер
+#_________________________________________________________________
+# df2, X3 - датасет после третьего пункта.
+
+object <- fit(object, df, 4)
+summary(object)
+plot(object)
+# получаем порядок, затем по этому порядку идём и обучаем ещё раз модели для отслеживания весов.
+
+# Получилось отбросить около половины предикторов, улучшив BIC модели.
+# Строим график трасс, выбираем, где остановиться.
+
+# Получим оптимальный порядок добавления предикторов
+# Как я понял, судя по формуле, sbc - это нужный нам критерий Байеса
+
+# Построим трассы
+
+# трасса коэффициентов без Intercept.
+# чем позднее появился, тем ярче цвет, тем менее важен признак с точки зрения BIC
+# Цвета упорядочены вручную в соответствии с порядком от ols.
+
+# R2 - чуть хуже, R2 скорректированный - почти не изменился.
+
+# BIC ещё меньше, уменьшили число предикторов.
+
+# 5 номер
+# ____________________________________________________________________
+# df2, X3 - датасет после третьего пункта.
+
+object <- fit(object, df, 5)
+summary(object)
+plot(object)
+# график BIC либо остаётся на прошлом уровне, либо идёт вниз.
+# Следовательно, берём все доступные компоненты (13).
+# BIC стал лучше, чем после пункта 3, но хуже, чем после пункта 4
+
+# Никакие нелинейные преобразования не смогут покрыть нелинейность в остатках.
+# Преобразования, рассмотренные во всех пунктах не дают значительного улучшения.
+# Лучшей моделью считаю step = 4, поскольку удалось при незначительных потерях качества
+# сильно упростить модель.
+
+
+
+

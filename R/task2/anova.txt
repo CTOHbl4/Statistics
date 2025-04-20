@@ -1,0 +1,300 @@
+"#1"
+
+
+Call:
+lm(formula = MPG_Highway ~ Type)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-11.6298  -2.6298  -0.6298   2.3702  17.3702 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   56.000      2.412   23.22   <2e-16 ***
+TypeSedan    -27.370      2.425  -11.29   <2e-16 ***
+TypeSports   -30.468      2.487  -12.25   <2e-16 ***
+TypeSUV      -35.500      2.471  -14.37   <2e-16 ***
+TypeTruck    -35.000      2.558  -13.68   <2e-16 ***
+TypeWagon    -28.100      2.529  -11.11   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 4.177 on 420 degrees of freedom
+Multiple R-squared:  0.4789,	Adjusted R-squared:  0.4727 
+F-statistic: 77.19 on 5 and 420 DF,  p-value: < 2.2e-16
+
+
+
+"#2"
+
+
+	Anderson-Darling normality test
+
+data:  Sedan
+A = 4.4567, p-value = 4.379e-11
+
+
+
+	Anderson-Darling normality test
+
+data:  Sports
+A = 0.47995, p-value = 0.2232 (!)
+
+
+
+	Anderson-Darling normality test
+
+data:  SUV
+A = 0.48048, p-value = 0.2249 (!)
+
+
+
+	Anderson-Darling normality test
+
+data:  Truck
+A = 1.3854, p-value = 0.001054
+
+
+
+	Anderson-Darling normality test
+
+data:  Wagon
+A = 0.25244, p-value = 0.7135 (!)
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "Hybrid", "Sports"
+Bartlett's K-squared = 7.6151, df = 1, p-value = 0.005788
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "Hybrid", "SUV"
+Bartlett's K-squared = 5.7384, df = 1, p-value = 0.0166 (!)
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "Hybrid", "Wagon"
+Bartlett's K-squared = 2.1742, df = 1, p-value = 0.1403 (!)
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "Sports", "SUV"
+Bartlett's K-squared = 0.74696, df = 1, p-value = 0.3874 (!)
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "Sports", "Wagon"
+Bartlett's K-squared = 5.8373, df = 1, p-value = 0.01569 (!)
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  "SUV", "Wagon"
+Bartlett's K-squared = 3.1565, df = 1, p-value = 0.07563 (!)
+
+
+aov:
+               Estimate Lower CL Upper CL Std. Error t value  Df  Pr(>|t|)    
+Sports - SUV     5.0319   3.0224   7.0414    0.67800  7.4217 134 3.593e-11 ***
+Sports - Wagon  -2.3681  -4.7788   0.0427    0.81339 -2.9114 134   0.01167 *   (!) 
+SUV - Wagon     -7.4000  -9.7067  -5.0933    0.77830 -9.5079 134 1.688e-14 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  MPG_Highway by Type
+W = 8836.5, p-value = 1.838e-06
+alternative hypothesis: true location shift is not equal to 0
+
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  MPG_Highway by Type
+W = 14790, p-value < 2.2e-16
+alternative hypothesis: true location shift is not equal to 0
+
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  MPG_Highway by Type
+W = 4248.5, p-value = 0.4662 (!)
+alternative hypothesis: true location shift is not equal to 0
+
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  SUV.Truck$MPG_Highway by SUV.Truck$Type
+W = 727, p-value = 0.9484 (!)
+alternative hypothesis: true location shift is not equal to 0
+
+"#4"
+
+Call:
+lm(formula = MPG_Highway ~ Type, data = df)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-11.6298  -2.6298  -0.6298   2.3702  17.3702 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   56.000      2.412   23.22   <2e-16 ***
+TypeSedan    -27.370      2.425  -11.29   <2e-16 ***
+TypeSports   -30.468      2.487  -12.25   <2e-16 ***
+TypeSUV      -35.500      2.471  -14.37   <2e-16 ***
+TypeTruck    -35.000      2.558  -13.68   <2e-16 ***
+TypeWagon    -28.100      2.529  -11.11   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 4.177 on 420 degrees of freedom
+Multiple R-squared:  0.4789,	Adjusted R-squared:  0.4727 
+F-statistic: 77.19 on 5 and 420 DF,  p-value: < 2.2e-16
+
+
+
+Call:
+lm(formula = MPG_Highway ~ Type + Origin, data = df)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-11.5049  -2.5049  -0.5049   2.1253  18.7264 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   56.0000     2.3412  23.920  < 2e-16 ***
+TypeSedan    -26.1253     2.3692 -11.027  < 2e-16 ***
+TypeSports   -28.9329     2.4327 -11.893  < 2e-16 ***
+TypeSUV      -34.4957     2.4115 -14.305  < 2e-16 ***
+TypeTruck    -34.0868     2.5030 -13.618  < 2e-16 ***
+TypeWagon    -26.7399     2.4699 -10.826  < 2e-16 ***
+OriginEurope  -2.6011     0.4985  -5.218 2.86e-07 ***
+OriginUSA     -1.3698     0.4717  -2.904  0.00388 **
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 4.055 on 418 degrees of freedom
+Multiple R-squared:  0.5112,	Adjusted R-squared:  0.5031 
+F-statistic: 62.46 on 7 and 418 DF,  p-value: < 2.2e-16
+
+
+
+"#5"
+
+Call:
+lm(formula = MPG_Highway ~ Type + Origin + Origin * Type, data = df)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-11.5444  -2.6558  -0.5444   2.3150  18.8846 
+
+Coefficients: (3 not defined because of singularities)
+                        Estimate Std. Error t value Pr(>|t|)    
+(Intercept)              56.0000     2.3489  23.841   <2e-16 ***
+TypeSedan               -26.0319     2.3861 -10.910   <2e-16 ***
+TypeSports              -29.0667     2.5731 -11.296   <2e-16 ***
+TypeSUV                 -34.3200     2.4858 -13.806   <2e-16 ***
+TypeTruck               -34.0000     2.7543 -12.344   <2e-16 ***
+TypeWagon               -27.8182     2.6499 -10.498   <2e-16 ***
+OriginEurope             -1.5985     1.6982  -0.941    0.347     (!)
+OriginUSA                 1.5325     1.9670   0.779    0.436     (!)
+TypeSedan:OriginEurope   -1.2542     1.8090  -0.693    0.488     (!)
+TypeSports:OriginEurope  -0.2044     2.1696  -0.094    0.925     (!)
+TypeSUV:OriginEurope     -1.3815     2.2806  -0.606    0.545     (!)
+TypeTruck:OriginEurope        NA         NA      NA       NA    
+TypeWagon:OriginEurope        NA         NA      NA       NA    
+TypeSedan:OriginUSA      -2.9561     2.0565  -1.437    0.151     (!)
+TypeSports:OriginUSA     -4.2436     2.6099  -1.626    0.105     (!)
+TypeSUV:OriginUSA        -3.1725     2.2789  -1.392    0.165     (!) 
+TypeTruck:OriginUSA      -3.0325     2.6406  -1.148    0.251     (!)
+TypeWagon:OriginUSA           NA         NA      NA       NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 4.068 on 411 degrees of freedom
+Multiple R-squared:  0.5163,	Adjusted R-squared:  0.4998 
+F-statistic: 31.33 on 14 and 411 DF,  p-value: < 2.2e-16
+
+
+
+
+Call:
+lm(formula = MPG_Highway ~ Type + Origin, data = df)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-11.5049  -2.5049  -0.5049   2.1253  18.7264 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   56.0000     2.3412  23.920  < 2e-16 ***
+TypeSedan    -26.1253     2.3692 -11.027  < 2e-16 ***
+TypeSports   -28.9329     2.4327 -11.893  < 2e-16 ***
+TypeSUV      -34.4957     2.4115 -14.305  < 2e-16 ***
+TypeTruck    -34.0868     2.5030 -13.618  < 2e-16 ***
+TypeWagon    -26.7399     2.4699 -10.826  < 2e-16 ***
+OriginEurope  -2.6011     0.4985  -5.218 2.86e-07 ***
+OriginUSA     -1.3698     0.4717  -2.904  0.00388 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 4.055 on 418 degrees of freedom
+Multiple R-squared:  0.5112,	Adjusted R-squared:  0.5031 
+F-statistic: 62.46 on 7 and 418 DF,  p-value: < 2.2e-16
+
+
+
+
+"#6"
+             Df Sum Sq Mean Sq F value   Pr(>F)    
+Origin        2   1325   662.5   35.13 1.17e-13 ***
+Residuals   185   3489    18.9                     
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  n6$MPG_Highway by n6$Origin
+W = 2581, p-value = 6.439e-09
+alternative hypothesis: true location shift is not equal to 0
+
+
+
+"#7"
+
+	Anderson-Darling normality test
+
+data:  resid
+A = 4.2819, p-value = 1.126e-10
+
+
+
+	Bartlett test of homogeneity of variances
+
+data:  list(subset(n6$MPG_Highway, n6$Origin == "Other"), subset(n6$MPG_Highway, n6$Origin == "USA"))
+Bartlett's K-squared = 3.0233, df = 1, p-value = 0.08208 (!)
+
+
+
+"#8"
+
+	Kruskal-Wallis rank sum test
+
+data:  n6$MPG_Highway by n6$Origin
+Kruskal-Wallis chi-squared = 33.725, df = 1, p-value = 6.347e-09
+

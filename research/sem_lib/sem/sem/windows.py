@@ -29,66 +29,64 @@ def calculate_acf(diffs):
     acf1 = torch.clamp(covariance / denominator, -1.0, 1.0)
     return acf1
 
+def create_sliding_windows(series, window_size):
+    if isinstance(series, np.ndarray):
+        series = torch.from_numpy(series).to(torch.float32)
+    series_len = len(series)
+    n_windows = series_len - window_size + 1
+    indices = torch.arange(window_size).unsqueeze(0) + torch.arange(n_windows).unsqueeze(1)
+    windows = series[indices]
+    return windows
 
-class Windows:
-    def create_sliding_windows(self, series, window_size):
-        if isinstance(series, np.ndarray):
-            series = torch.from_numpy(series).to(torch.float32)
-        series_len = len(series)
-        n_windows = series_len - window_size + 1
-        indices = torch.arange(window_size).unsqueeze(0) + torch.arange(n_windows).unsqueeze(1)
-        windows = series[indices]
-        return windows
+def _stationarity_check(series, window_size, alpha=0.5, max_memory=MAX_GPU_OCCUPANCE):
+    batch_size = max_memory // (4 * window_size)
+    limit, rem = divmod(len(series) - window_size + 1, batch_size)
+    if rem > 0:
+        limit += 1
+    stationary_mask = True
+    max_acf = 0
+    for i in range(limit):
+        series_array = create_sliding_windows(series[i * batch_size: (i+1) * batch_size + window_size - 1], window_size)
+        diffs = torch.diff(series_array, dim=1)
+        acf = torch.abs(calculate_acf(diffs))
+        _max_acf = torch.max(acf)
+        if _max_acf > max_acf:
+            max_acf = _max_acf
 
-    def _stationarity_check(self, series, window_size, alpha=0.5, max_memory=MAX_GPU_OCCUPANCE):
-        batch_size = max_memory // (4 * window_size)
-        limit, rem = divmod(len(series) - window_size + 1, batch_size)
-        if rem > 0:
-            limit += 1
-        stationary_mask = True
-        max_acf = 0
-        for i in range(limit):
-            series_array = self.create_sliding_windows(series[i * batch_size: (i+1) * batch_size + window_size - 1], window_size)
-            diffs = torch.diff(series_array, dim=1)
-            acf = torch.abs(calculate_acf(diffs))
-            _max_acf = torch.max(acf)
-            if _max_acf > max_acf:
-                max_acf = _max_acf
+        stationary_mask &= torch.all(acf < alpha)
+    print(f"N = {window_size}; Max ACF(1): {max_acf.item()}")
+    return stationary_mask
 
-            stationary_mask &= torch.all(acf < alpha)
-        print(f"N = {window_size}; Max ACF(1): {max_acf.item()}")
-        return stationary_mask
 
-    def _find_N(self, series, alpha=0.5, N_init=100, N_add=10, max_memory=MAX_GPU_OCCUPANCE):
-        """
-        Find N for which the series is stationary
-        """
-        while not self._stationarity_check(series, N_init, alpha, max_memory):
-            N_init += N_add
-            if N_init > len(series):
-                print(f"Warning: N_init ({N_init}) exceeds series length ({len(series)})")
-                break
+def _find_N(series, alpha=0.5, N_init=100, N_add=10, max_memory=MAX_GPU_OCCUPANCE):
+    """
+    Find N for which the series is stationary
+    """
+    while not _stationarity_check(series, N_init, alpha, max_memory):
+        N_init += N_add
+        if N_init > len(series):
+            print(f"Warning: N_init ({N_init}) exceeds series length ({len(series)})")
+            break
 
-        return N_init
+    return N_init
 
-    def __call__(self, series, alpha=0.5, N_init=100, N_add=10, max_gpu_memory=MAX_GPU_OCCUPANCE, max_res_memory=1024*1024*1024):
-        """
-        Find N for which acf(1) < alpha and return slicing parameters:
-        start, finish, increment, window_size.
+def get_start_finish_increment(window_size, max_res_memory=1024*1024*1024):
+    batch_size = max_res_memory // (4 * window_size)
+    return 0, batch_size + window_size - 1, batch_size
 
-        create_slicing_windows(series[start:finish], window_size)
-        start += increment
-        finish += increment
-        """
-        if isinstance(series, np.ndarray):
-            series = torch.from_numpy(series).to(torch.float32)
-        N = self._find_N(series, alpha, N_init, N_add, max_gpu_memory)
-        print("Found window length:", N)
-        batch_size = max_res_memory // (4 * N)
-        limit, rem = divmod(len(series) - N + 1, batch_size)
-        if rem > 0:
-            limit += 1
+def find_window_size(series, alpha=0.5, N_init=100, N_add=10, max_gpu_memory=MAX_GPU_OCCUPANCE, max_res_memory=1024*1024*1024):
+    """
+    Find N for which acf(1) < alpha and return slicing parameters:
+    start, finish, increment, window_size.
 
-        start = 0
-        finish = batch_size + N - 1
-        return start, finish, batch_size, N
+    create_slicing_windows(series[start:finish], window_size)
+    start += increment
+    finish += increment
+    """
+    if isinstance(series, np.ndarray):
+        series = torch.from_numpy(series).to(torch.float32)
+    N = _find_N(series, alpha, N_init, N_add, max_gpu_memory)
+    print("Found window length:", N)
+    start, finish, increment = get_start_finish_increment(N, max_res_memory)
+
+    return start, finish, increment, N

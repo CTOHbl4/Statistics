@@ -109,7 +109,6 @@ def create_sde_process(
     Returns:
         Dictionary containing process X(t), coefficients, and parameters
     """
-    # Generate drift coefficient a(t) as Fourier series
     a_result = create_fourier_series(
         length=length,
         min_value=a_min,
@@ -119,11 +118,9 @@ def create_sde_process(
         max_freq=a_max_freq
     )
     a_t = a_result['series']
-    
-    # Ensure a(t) has zero mean
+
     a_t = a_t - np.mean(a_t)
-    
-    # Initialize volatility process b(t) with GARCH dynamics
+
     b_t = np.zeros(length)
     b_t[0] = b_long_term
 
@@ -132,23 +129,18 @@ def create_sde_process(
     X = np.zeros(length)
     increments = np.zeros(length)
 
-    # Simulate process using Euler-Maruyama
     for i in range(1, length):
-        # GARCH volatility update with leverage effect
         returns_sq = increments[i-1] ** 2
-        
-        # Leverage effect: negative returns increase volatility more
+
         leverage_effect = leverage * min(increments[i-1], 0)
-        
-        # GARCH(1,1) update
+
         b_sq = (1 - b_alpha - b_beta) * (b_long_term ** 2) + \
                b_alpha * returns_sq + \
                b_beta * (b_t[i-1] ** 2) + \
                leverage_effect
 
         b_t[i] = np.sqrt(max(b_sq, 0.001))
-        
-        # Generate increment
+
         increments[i] = a_t[i] * dt + b_t[i] * dW[i]
         X[i] = X[i-1] + increments[i]
     

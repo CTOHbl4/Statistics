@@ -64,12 +64,10 @@ class MixtureSEM:
         cdf = 0.5 * (1 + sign(z) * (1 - betainc(nu_cpu/2, 0.5, x)))
         return torch.tensor(cdf, dtype=torch.float32, device=mid.device)
 
-    def __init__(self, time_series, weights=None, window_size=None, n_components=2,
+    def __init__(self, time_series, window_size=None, n_components=2,
                  tol=1e-4, N_init=5, comp_distr='normal',
-                 exp_smooth=0.99, alpha=0.7, prior_strength=1.0, device="cuda"):
-        '''
-        weights: None/"exp"
-        '''
+                 exp_smooth=1.0, alpha=0.7, prior_strength=1.0, device="cuda"):
+
         self.prior_strength = prior_strength
         self.time_series = time_series
         if window_size is None:
@@ -80,8 +78,8 @@ class MixtureSEM:
         self.device = device
         self.n_components = n_components
         self.tol = tol
-        self.exp_smooth = exp_smooth
-        self.weights = self._get_weights(weights)
+        self.weights = self._get_weights(exp_smooth)
+        self.comp_distr = comp_distr
         if comp_distr == 'normal':
             self._m_step = self._m_step_normal
             self._log_pdf = self.log_pdf_normal
@@ -122,12 +120,9 @@ class MixtureSEM:
             args['nu'] = nu
         return w, args
 
-    def _get_weights(self, weights_name):
-        if weights_name is None:
-            return torch.ones((1, self.series_length, 1), dtype=torch.float32).to(self.device)
-        if weights_name == 'exp':
-            return torch.tensor([self.exp_smooth ** (self.series_length - 1 - i) for i in range(self.series_length)], device=self.device).reshape((1, self.series_length, 1)).to(self.device)
-        raise NotImplementedError("weights not implemented")
+    def _get_weights(self, exp_smooth):
+        assert 0 < exp_smooth <= 1.0, "Invalid exp_smooth parameter"
+        return exp_smooth ** torch.arange(self.series_length - 1, -1, -1, dtype=torch.float32, device=self.device).reshape((1, self.series_length, 1))
 
     def _s_step(self, g):
         component = torch.multinomial(g.reshape((-1, self.n_components)), 1).to(self.device)
@@ -142,11 +137,8 @@ class MixtureSEM:
         log_density = self._log_pdf(windows, **args)
         log_weights = torch.log(w + self.eps)
         log_mixture = log_density + log_weights
-
         log_normalization = torch.logsumexp(log_mixture, dim=2, keepdim=True)
-        responsibilities = torch.exp(log_mixture - log_normalization)
-
-        return responsibilities
+        return torch.exp(log_mixture - log_normalization)
 
     def _m_step_normal(self, windows, y, v, **args):
         w = (v + self.prior_strength)
@@ -181,7 +173,8 @@ class MixtureSEM:
         prior_var = torch.var(windows, dim=1, keepdim=True).expand(-1, -1, self.n_components)
 
         blended_variance = (data_variance * v + prior_var * self.prior_strength) / (v + self.prior_strength)
-        blended_s = (torch.sqrt(3 * blended_variance + self.eps) / torch.pi)
+
+        blended_s = torch.sqrt(3 * blended_variance + self.eps) / torch.pi
         return w, {'mu': mu, 'sigma': blended_s}
 
     def _m_step_laplace(self, windows, y, v, **args):
@@ -297,6 +290,7 @@ class MixtureSEM:
             g = self._e_step(windows_exp, w, **args)
             y, v = self._s_step(g)
             w, args = self._m_step(windows_exp, y, v, **args)
+            print(torch.isnan(args['sigma']).any())
             curr_params_norm = self._get_params_norm(**args)
             d = curr_params_norm / prev_params_norm
             prev_params_norm = curr_params_norm

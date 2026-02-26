@@ -4,7 +4,7 @@ from torch import nn
 
 class NormalMixtureEM(torch.nn.Module):
     def __init__(self, series_length, input_dim=2, n_components=2,
-                 n_em_iters=5, eps=1e-8):
+                 n_em_iters=5, exp_smooth=1.0, eps=1e-8):
         super().__init__()
         self.n_components = n_components
         self.n_em_iters = n_em_iters
@@ -16,7 +16,7 @@ class NormalMixtureEM(torch.nn.Module):
         self.init_scales = nn.Parameter(torch.ones(n_components, dtype=torch.float32), requires_grad=False)
         self.init_weights = nn.Parameter(torch.ones(n_components, dtype=torch.float32) / n_components, requires_grad=False)
         self.prior_w = nn.Parameter(torch.ones(1, dtype=torch.float32) * 10)
-        self.weights = nn.Parameter(torch.log(0.8 ** torch.arange(start=series_length-1, end=-1, step=-1, dtype=torch.float32)).reshape(weights_shape))
+        self.weights = nn.Parameter(torch.log(exp_smooth ** torch.arange(start=series_length-1, end=-1, step=-1, dtype=torch.float32)).reshape(weights_shape))
         self.blend = nn.Parameter(torch.ones(1, dtype=torch.float32) * 10)
     
     def _initialize_parameters(self, windows):

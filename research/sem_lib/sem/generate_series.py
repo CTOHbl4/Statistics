@@ -12,10 +12,10 @@ def create_fourier_series(
 ) -> Dict:
     """
     Create a Fourier series (single regime).
-    
-    Each additive is of the form: A * sin(2π * freq * t + phase), 
+
+    Each additive is of the form: A * sin(2π * freq * t + phase),
     where t ∈ [0, 1] with `length` steps.
-    
+
     Args:
         length: Number of time points
         min_value: Minimum value for amplitude scaling
@@ -23,7 +23,7 @@ def create_fourier_series(
         num_additives: Number of sine wave additives
         min_freq: Minimum frequency
         max_freq: Maximum frequency
-    
+
     Returns:
         Dictionary containing the series, components, and parameters
     """
@@ -34,7 +34,7 @@ def create_fourier_series(
         amplitude_range * 1.5,
         num_additives
     )
-    
+
     frequencies = np.random.uniform(min_freq, max_freq, num_additives)
     phases = np.random.uniform(0, 2 * np.pi, num_additives)
 
@@ -43,7 +43,7 @@ def create_fourier_series(
         A = amplitudes[i]
         freq = frequencies[i]
         phase = phases[i]
-        
+
         components[i] = A * np.sin(2 * np.pi * freq * t + phase)
 
     series = components.sum(axis=0)
@@ -55,8 +55,9 @@ def create_fourier_series(
     target_center = (max_value + min_value) / 2
 
     series_final = (series - center) * scale_factor + target_center
-    components_final = scale_factor * components + (target_center - scale_factor * center) / len(components)
-    
+    components_final = scale_factor * components + \
+        (target_center - scale_factor * center) / len(components)
+
     return {
         'series': series_final,
         'components': components_final,
@@ -89,10 +90,10 @@ def create_sde_process(
 ) -> Dict:
     """
     Create SDE process: dX(t) = a(t)dt + b(t)dW(t)
-    
+
     a(t) is drift coefficient (Fourier series)
     b(t) follows GARCH-like dynamics with optional leverage effect
-    
+
     Args:
         length: Number of time steps
         a_min: Minimum drift value
@@ -105,7 +106,7 @@ def create_sde_process(
         b_beta: GARCH weight on past volatility
         dt: Time step size
         leverage: Leverage effect parameter (negative for typical effect)
-    
+
     Returns:
         Dictionary containing process X(t), coefficients, and parameters
     """
@@ -135,15 +136,15 @@ def create_sde_process(
         leverage_effect = leverage * min(increments[i-1], 0)
 
         b_sq = (1 - b_alpha - b_beta) * (b_long_term ** 2) + \
-               b_alpha * returns_sq + \
-               b_beta * (b_t[i-1] ** 2) + \
-               leverage_effect
+            b_alpha * returns_sq + \
+            b_beta * (b_t[i-1] ** 2) + \
+            leverage_effect
 
         b_t[i] = np.sqrt(max(b_sq, 0.001))
 
         increments[i] = a_t[i] * dt + b_t[i] * dW[i]
         X[i] = X[i-1] + increments[i]
-    
+
     return {
         'X': X,
         'a_t': a_t,
